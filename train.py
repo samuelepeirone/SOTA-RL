@@ -295,10 +295,10 @@ class GridNet:
             self.remaining_reward -= self.penality    
     	    
     def down(self):
-        if self.current_node < (self.line_numbers-1)*self.column_numbers:
-    	    self.current_node = self.current_node + self.column_numbers
+        if self.current_node < (self.line_numbers - 1) * self.column_numbers:
+            self.current_node = self.current_node + self.column_numbers
         else:
-            self.remaining_reward -= self.penality    	    
+            self.remaining_reward -= self.penality
     	    
     def left(self):
         if self.current_node%self.column_numbers>0:
