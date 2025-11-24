@@ -1,0 +1,3 @@
+[submodule "external/SOTA-py"]
+	path = external/SOTA-py
+	url = https://github.com/samuelepeirone/SOTA-py.git
