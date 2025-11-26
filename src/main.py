@@ -21,15 +21,16 @@ from utilities import Utils
 from Grid_network_and_Gamma_distribution import Matrix
 
 from train import GridNet
+from test import Test
 
 def main():
     graph = Utils.load_object("./external/SOTA-py/notebook/instances/graphs/5x5-1.pkl")
-    graph.prune_node(17)
+    #graph.prune_node(17)
     #graph.prune_edge(7,12)
 
     grid = GridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix())
 
-    grid.init_qtable()
+    grid.run()
 
 if __name__ == "__main__":
     main()

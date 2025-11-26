@@ -1,6 +1,3 @@
-#
-# train Q-learning algorithm for reliable policies in routing
-#
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,7 +7,23 @@ import copy
 import random
 
 class GridNet:
+    """
+    Q-learning algorithm training for reliable policies in routing
+    """
     def __init__(self, adj_matrix, var_matrix):
+        """
+        Initializing GridNet class.
+
+        Some structures:
+        - discrete_rate: in how many steps is discretized each time-budget unit.
+            for d_r = 4 -> each step is = 1/4 = 0.25
+        - number_of_visits: 3D matrix that counts the number of times that
+            a couple (s,a) has been visited.
+            structure: [num_nodes, num_discrete_remaining_reward_values, actions]
+        - episode_lissage: as the Q-table of each episode is noisy, we will
+            do a mean on N episodes, with N=episode_lissage
+        """
+        # matrices
         self.adj_matrix = adj_matrix
         self.var_matrix = var_matrix
 
@@ -19,39 +32,55 @@ class GridNet:
         self.column_numbers = self.line_numbers
         self.num_nodes = adj_matrix.shape[0]
 
+        self.initial_node = 0
         self.destination_node = 24
 
         self.max_rem_rew = 30 # gives the dimension of time
 
-        # discretization rate: in how many steps is discretized each time-budget unit
-        self.discrete_rate = 4  # 4 -> each step is = 1/4 = 0.25
+        self.discrete_rate = 4
 
-        self.precision = 1/np.power(10,10)  # precision de convergence
+        self.precision = 1/np.power(10,10)  # convergence precision
         self.dev = []   # deviation: max(abs(self.qtable - qtab))
-        #####
-        self.initial_node = 0
-        self.current_node = 0
+        
+        # =============================
+        # ======= RL parameters =======
+        # =============================
+
+        # reward and penalty
         self.rew = 0
         self.penality = 100
+
+        # episode parameters
+        self.episode_number = 500000
+        self.episode_lissage = 1000
+
+        # internal RL variables
+        self.current_node = 0
         self.remaining_reward = self.max_rem_rew
-        self.alpha = 0.001 #0.001
+
+        # Bellman optimality function parameters
+        self.alpha = 0.001
         self.gamma = 0.99
+
+        # Q-tables
         self.qtable = [[[]]]
         self.qtable2 = [[[]]]
-        self.qtable_L1 = [[[]]]
-        self.qtable_L2 = [[[]]]
+        self.qtable_L1 = [[[]]]     # lissed mean of Q-table
+        self.qtable_L2 = [[[]]]     # lissed mean of previous group
         self.qtable_L = [[[]]]
         self.qtable_L_old = [[[]]]
-        self.number_of_visits = [[[]]]
-        self.episode_number = 100000000
-        self.episode_lissage = 500000
         self.qtable_ep = [[[]]]
-        self.dev_vec = self.dev_vec = np.zeros((int(self.episode_number/self.episode_lissage),2))
+
+        # tracking how many times a state has been visited
+        self.number_of_visits = [[[]]]
+
+        # episodes
+        self.dev_vec = np.zeros((int(self.episode_number/self.episode_lissage), 2))
         self.max_step_number = 30
         self.eps = 1
         self.avg_rew = 0
-        self.avg_rew_vec = [] # np.zeros(self.episode_number+1)
-        self.avg_nbr_step = [] # np.zeros(self.episode_number+1)
+        self.avg_rew_vec = []
+        self.avg_nbr_step = []
         self.ep_nbr_vec = []
     
     # ==========================================================
@@ -193,7 +222,7 @@ class GridNet:
         Helps to understand when a state is a terminal state
         """
         # if we get to destination node with remaining time budget
-        if (self.current_node == self.destination_node) & (self.remaining_reward >= 0):
+        if (self.current_node == self.destination_node) and (self.remaining_reward >= 0):
             return 1
         # if we consume time budget
         elif (self.remaining_reward < 0):
@@ -237,166 +266,214 @@ class GridNet:
         self.qtable_ep = np.zeros((int(self.episode_number/self.episode_lissage), self.num_nodes, self.max_rem_rew*self.discrete_rate+1))
 
     def eps_greedy(self, node, rem_rew):
-        r = np.random.random_sample() 
-        #print("eps = ", self.eps)                                
+        """
+        Implementing eps-greedy policy and returning the action to do.
+
+        @param rem_rew: remaining reward
+        """
+        # generating random number from 0 to 1
+        r = np.random.random_sample()
+
         if r < self.eps:
-            action = np.random.randint(4) 
-            #print("random")
+            # the agent does exploration
+            action = np.random.randint(4)
         else:
-            action = np.argmax(self.qtable[node][int(1+self.discrete_rate*rem_rew)][:])                 
-            #print("max")
-        return action         
+            # the agent does exploitation
+            idx = int(1 + self.discrete_rate * rem_rew)
+            idx = max(0, min(idx, self.qtable.shape[1]-1))    # protecting from negative numbers
+            action = np.argmax(self.qtable[node][idx][:])     # converting continous reward into discrete index of the Q-table         
+
+        return action
         
     def learn(self):
-        # max_step = 20
-        max_step = [15, 14, 13, 12, 11, 14, 13, 12, 11, 10, 13, 12, 11, 10, 9, 12, 11, 10, 9, 8, 11, 10, 9, 8, 7];
+        """
+        R2L learning function.
+
+        Some parameters:
+        - max_step: maximum step limit for each grid node. Each node will have an 
+            assigned limit, where for nodes close to destination is lower than for
+            the ones more far away. This variable will be used for eps_greedy decay
+            computation.
+        - dev: vector that contains the deviation between Q-table of current episode
+            and Q-table of last episode. It measure how much tha Q-table has changed.
+        """
+        # initializing data structures
+        max_step = [15, 14, 13, 12, 11, 14, 13, 12, 11, 10, 13, 12, 11, 10, 9, 12, 11, 10, 9, 8, 11, 10, 9, 8, 7]
+
+        # initializing Q-tables
         self.init_qtable()
-        self.qtable2 = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4)) 
-        qtab_L = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4)) 
-        self.qtable_L = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4)) 
-        ep = 1
-        self.dev = np.zeros(self.episode_number+1)
-        dev1 = np.max(np.abs(np.max(self.qtable,2) - np.max(self.qtable2,2)))
-        #dev2 = np.linalg.norm(np.max(self.qtable,2) - np.max(self.qtable2,2))
+        self.qtable2 = np.zeros((self.num_nodes, self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L = np.zeros((self.num_nodes, self.max_rem_rew*self.discrete_rate + 1, 4))
+        self.qtable_L1 = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L2 = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L_old = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        
+        # deviation
+        self.dev = np.zeros(self.episode_number + 1)    # vector that contains deviation 
+        dev1 = np.max(np.abs(np.max(self.qtable, 2) - np.max(self.qtable2, 2)))
         dev_sup = 1
-        dev1 = 1
-        self.qtable_L1 = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4)) 
-        self.qtable_L2 = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4))         
-        self.qtable_L = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4)) 
-        self.qtable_L_old = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4))         
-        self.number_of_visits = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4)) 
-        avg_rew_ep_liss = 0
-        ep_nbr = 0
-        step_nbr = 0        
-        i_liss = 0
-        self.dev_vec = np.zeros((int(self.episode_number/self.episode_lissage),2))
-        while (ep <= self.episode_number) & (dev1 >= self.precision) :
-            #print("Episode = ", ep, "----------  deviation_inf = ", dev, "----------  deviation_2 = ", dev2)
+        
+        self.number_of_visits = np.zeros((self.num_nodes, self.max_rem_rew*self.discrete_rate + 1, 4))
+        avg_rew_ep_liss = 0     # average reward per episode
+        ep_nbr = 0      # number of valid episodes in the block
+        step_nbr = 0    # number of steps in valid episodes of the block
+        i_liss = 0      # index of lissed block
+        self.dev_vec = np.zeros((int(self.episode_number/self.episode_lissage), 2))
+        
+        ep = 1
+        dev1 = 1    # standard deviation
+
+        # looping on all episodes while the deviation standard is greater than the precision
+        while (ep <= self.episode_number) and (dev1 >= self.precision):
+            # resetting the environment
             self.reset()
-            self.number_of_visits[self.current_node][int(1 + self.discrete_rate * self.remaining_reward)][0] += 1
+
+            # updating the number of visits
+            idx_start = int(1 + self.discrete_rate * self.remaining_reward)
+            idx_start = max(0, min(idx_start, self.qtable.shape[1]-1))
+            self.number_of_visits[self.current_node][idx_start][0] += 1
             step = 1
             self.avg_rew = 0
             self.eps = 1
-            #if ep%1000 == 0:
+            
             self.qtable2 = copy.copy(self.qtable)
             self.dev[ep] = dev1
             ep_valide = False
-            # print("deviation = ", dev)
-            # if (self.current_node >= 10) & (self.remaining_reward >= 25):
-            #    ep_nbr += 1
-            #    ep_valide = True            
+
+            # looping on steps of the episode until I get into a terminal state or I reach the maximum number of steps
             while self.is_terminal() == 0 & step <= self.max_step_number:
-                # print("----- step = ", step)
                 node = self.current_node
                 rem_rew = self.remaining_reward
-                action = self.eps_greedy(node, rem_rew)                
+
+                # protecting indexes
+                idx_curr = int(1 + self.discrete_rate * rem_rew)
+                idx_curr = max(0, min(idx_curr, self.qtable.shape[1]-1))
+
+                # choosing the action and updating the reward
+                action = self.eps_greedy(node, rem_rew)
                 self.step(action)
-                #print("rew = ", self.rew)
                 self.avg_rew += self.rew
+
                 done = self.is_terminal()
-                #print("done = ", done)
+
+                # computing next state indexes and max Q[next]
+                idx_next = int(1 + self.discrete_rate * self.remaining_reward)
+                idx_next = max(0, min(idx_next, self.qtable.shape[1]-1))
+                max_q_next = np.max(self.qtable[self.current_node][idx_next][:])
+                
                 if done == 0:
-                    #print("node = ", node)
-                    #print("action = ", action)
-                    #print("rem rew = ", int(1 + self.discrete_rate * rem_rew))
-                    #print("old qtable = ", self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action])
-                    #print("remaining_reward = ", self.remaining_reward)
-                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] += self.alpha * (self.gamma * np.max(self.qtable[self.current_node][int(1 + self.discrete_rate * self.remaining_reward)][:]) - self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action]) 
-                    #print("new qtable = ", self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action])              
+                    # not a terminal node: 
+                    # Q[s] = Q[s] + alpha(gamma * max Q[next] - Q[s])
+                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] += self.alpha * (self.gamma * max_q_next - self.qtable[node][idx_curr][action])           
                 elif done == 1:
-                    #print("node = ", node)
-                    #print("action = ", action)
-                    #print("rem rew = ", int(1 + self.discrete_rate * rem_rew))
-                    #print("old qtable = ", self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action])
-                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] += self.alpha * (self.gamma  - self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action]) 
-                    #print("new qtable = ", self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action])                  
+                    # terminal node:
+                    # Q[s] = Q[s] + alpha(gamma - Q[s])
+                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] += self.alpha * (self.gamma - self.qtable[node][idx_curr][action])
                 else:
-                    #print("node = ", node)
-                    #print("action = ", action)
-                    #print("rem rew = ", int(1 + self.discrete_rate * rem_rew))
-                    #print("old qtable = ", self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action])
-                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] = 0 
-                    #print("new qtable = ", self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action])                   
+                    # no more time budget, I penalize this type of action with:
+                    # Q[s] = 0
+                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] = 0
+                
+                # eps decay: reducing epsilon at each step by the constant 1/max_step[node]
                 self.eps = max(0, self.eps - 1/(max_step[node]))
-                step += 1                
-            #print("number of steps = ", step - 1)  
-            # max_step = step - 1             
-            #
+                
+                step += 1
+            
+            # validity check of the episode
             if self.is_terminal() == 1:
-                step_nbr += (step - 1)
-                ep_nbr += 1
+                step_nbr += (step - 1)  # number of steps in the valid episodes
+                ep_nbr += 1     # number of valid episodes
                 ep_valide = True
-            #
-            # self.qtable_ep[ep][:] = np.max(self.qtable[:,self.max_rem_rew-10,:],1)
-            #print("self.qtable = ",np.max(self.qtable,2))
-            #print("qtab = ",np.max(self.qtable2,2))            
-            #dev1 = np.max(np.abs(np.max(self.qtable,2) - np.max(self.qtable2,2)))
-            #dev2 = np.linalg.norm(np.max(self.qtable,2) - np.max(self.qtable2,2))
-            #print("Average reward = ", self.avg_rew) 
-            #print("--------------")   
-            #if ep > (self.episode_number - self.episode_lissage):
-            #    self.qtable_L += self.qtable
-            #
+            
             if ep_valide:
+                # computing the average reward and cumulate it into avg_rew_ep_liss
                 self.avg_rew = self.avg_rew / (step-1)
-                #print("avg_rew = ", self.avg_rew)
-                # self.avg_rew_vec[ep] = self.avg_rew    
-                avg_rew_ep_liss += self.avg_rew                 
+                avg_rew_ep_liss += self.avg_rew
+            
+            # if I'm not at the end of episode lissage
             if (ep % self.episode_lissage) != 0:
+                # accumulate the Q-tables in qtable_L1
                 self.qtable_L1 += self.qtable                 
             else:
+                # episode lissage reached: time to do a lissed snapshot
                 print("Episode = ", ep, "----------  Error norm sup = ", dev_sup, "----------  Error norm 1 = ", dev1)
-                self.qtable_L1 = self.qtable_L1 / self.episode_lissage 
-                self.qtable_ep[i_liss] = np.max(self.qtable_L1,2)
+
+                # remember that qtable_L1 contains the accumulated Q-values. by dividing by the number of episodes we are doing a mean
+                self.qtable_L1 = self.qtable_L1 / self.episode_lissage
+
+                # saving max Q(s, a) in episode-Q-table
+                self.qtable_ep[i_liss] = np.max(self.qtable_L1, 2)
+
+                # taking the best value of the previous lissed-Q-table
                 vec_max = np.argmax(self.qtable_L2,2)
-                dev_sup=0
-                for ii in range(0,self.line_numbers*self.column_numbers):
-                    for jj in range(0,self.max_rem_rew*self.discrete_rate+1):
-                        dev_sup = max(dev_sup, np.abs(self.qtable_L1[ii][ii][vec_max[ii][jj]] - self.qtable_L2[ii][ii][vec_max[ii][jj]]))   
-                # dev = np.max(np.abs(self.qtable_L1[np.meshgrid(self.line_numbers*self.column_numbers-1,self.max_rem_rew*self.discrete_rate),vec_max] - self.qtable_L2[:][:][vec_max]))
-                # dev = np.max(np.abs(np.max(self.qtable_L1,2) - np.max(self.qtable_L2,2)))
-                #argmax = np.argmax(np.abs(np.max(self.qtable_L1,2) - np.max(self.qtable_L2,2)))
-                #print("argmax = ", argmax)
-                #dev2 = np.linalg.norm(np.max(self.qtable_L1,2) - np.max(self.qtable_L2,2), ord=1)/(self.line_numbers*self.column_numbers*self.max_rem_rew*self.discrete_rate)
+
+                # computing sup-norm deviation (maximum error) between qtable_L1 and qtable_L2
+                dev_sup = 0
+
+                # looping on states (nodes)
+                for ii in range(0, self.num_nodes - 1):
+                    # looping on discretized residual budget
+                    for jj in range(0, self.max_rem_rew * self.discrete_rate + 1):
+                        # old line: dev_sup = max(dev_sup, np.abs(self.qtable_L1[ii][ii][vec_max[ii][jj]] - self.qtable_L2[ii][ii][vec_max[ii][jj]]))
+                        dev_sup = max(dev_sup, np.abs(self.qtable_L1[ii][jj][vec_max[ii][jj]] - self.qtable_L2[ii][jj][vec_max[ii][jj]]))
+                
+                # computing norm 1 (average error) between qtable_L1 and qtable_L2
                 dev1 = 0
-                for ii in range(0,self.line_numbers*self.column_numbers):
-                    for jj in range(0,self.max_rem_rew*self.discrete_rate+1):
-                        dev1 += np.abs(self.qtable_L1[ii][ii][vec_max[ii][jj]] - self.qtable_L2[ii][ii][vec_max[ii][jj]])
-                dev1 = dev1/(self.line_numbers*self.column_numbers*self.max_rem_rew*self.discrete_rate)        
+
+                for ii in range(0, self.num_nodes - 1):
+                    for jj in range(0, self.max_rem_rew*self.discrete_rate + 1):
+                        # old line: dev1 += np.abs(self.qtable_L1[ii][ii][vec_max[ii][jj]] - self.qtable_L2[ii][ii][vec_max[ii][jj]])
+                        dev1 += np.abs(self.qtable_L1[ii][jj][vec_max[ii][jj]] - self.qtable_L2[ii][jj][vec_max[ii][jj]])
+                
+                dev1 = dev1/(self.num_nodes*self.max_rem_rew*self.discrete_rate)        
                 # dev2 = np.linalg.norm(self.qtable_L1[:][:][vec_max] - self.qtable_L2[:][:][vec_max], ord=1)/(self.line_numbers*self.column_numbers*self.max_rem_rew*self.discrete_rate)
+                
+                # saving the errors in dev_vec
                 self.dev_vec[i_liss,:] = [dev_sup,dev1]
+
+                # update of the lissed tables
                 self.qtable_L_old = copy.copy(self.qtable_L2)
                 self.qtable_L2 = copy.copy(self.qtable_L1)
                 self.qtable_L = copy.copy(self.qtable_L1)
-                self.qtable_L1 = np.zeros((self.line_numbers*self.column_numbers,self.max_rem_rew*self.discrete_rate+1,4))    
-                self.avg_rew_vec.append(avg_rew_ep_liss/ ep_nbr) # self.episode_lissage) 
-                self.avg_nbr_step.append(step_nbr / ep_nbr)
+                self.qtable_L1 = np.zeros((self.num_nodes, self.max_rem_rew * self.discrete_rate + 1, 4))     # resettin qtable_L1
+
+                # saving episode metrics
+                self.avg_rew_vec.append(avg_rew_ep_liss/ ep_nbr)    # average reward per episode
+                self.avg_nbr_step.append(step_nbr / ep_nbr)     # average steps per episode
                 print("step_nbr = ", step_nbr / ep_nbr)
-                self.ep_nbr_vec.append(ep_nbr)
+                self.ep_nbr_vec.append(ep_nbr)      # number of valid episodes executed in the block
+
+                # resetting variables for next cycle
                 ep_nbr = 0
-                step_nbr = 0 
-                avg_rew_ep_liss = 0 
-                i_liss += 1          
-            ep += 1                                        
-        # plt.plot(self.avg_rew_vec)        
+                step_nbr = 0
+                avg_rew_ep_liss = 0
+                i_liss += 1
+
+            ep += 1
+        
+        # plt.plot(self.avg_rew_vec)
         # df = pandas.DataFrame({'Episodes':range(0,self.episode_number), 'y':self.avg_rew_vec})
         # df.set_index('Episodes', inplace=True)
-        # plot = df.plot(title='Average reward')       
+        # plot = df.plot(title='Average reward')
         # plot.get_figure().savefig('/home/nadir/Aall/Articles/2024/2024_QL-SOTA/pgms/Q_learning/fig1.pdf', format='pdf')
-        # self.qtable_L = self.qtable_L / self.episode_lissage                
-    def run(self):                     
-        Net = GridNet()
-        Net.build_adj()
-        # print("adj = ", Net.adj_matrix)
-        Net.build_link_mean()
-        Net.build_link_var()
-        Net.learn()
-        #
-        with open('grid_5x5_test.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-            pickle.dump([Net.qtable_L, Net.qtable_L_old, Net.avg_rew_vec, Net.avg_nbr_step, Net.ep_nbr_vec, Net.qtable_ep, Net.number_of_visits, Net.dev_vec], f)
-        print("data saved")
-        
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="TRAIN")
-    GridNet().run()        
+        # self.qtable_L = self.qtable_L / self.episode_lissage
 
+    def run(self):                     
+        """
+        Running the learn function and saving results of the run.
+        """
+        self.learn()
+        
+        with open('grid_5x5_test.pkl', 'wb') as f:
+            pickle.dump([
+                self.qtable_L, 
+                self.qtable_L_old, 
+                self.avg_rew_vec, 
+                self.avg_nbr_step, 
+                self.ep_nbr_vec, 
+                self.qtable_ep,
+                self.number_of_visits, 
+                self.dev_vec], 
+                f)
+        print("data saved")
