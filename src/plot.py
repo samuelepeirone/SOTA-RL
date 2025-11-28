@@ -2,7 +2,7 @@
 # Plot Q-learning
 #
 
-from train import GridNet
+from old_train import GridNet
 
 import numpy as np
 import pickle
