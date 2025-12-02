@@ -121,6 +121,9 @@ class GridNet(ABC):
         self.avg_rew_vec = []
         self.avg_nbr_step = []
         self.ep_nbr_vec = []
+
+        # computation time
+        self.precomputation_time = 0
     
     # ==========================================================
     # ========================= UTILS  =========================
@@ -526,6 +529,8 @@ class GridNet(ABC):
     def run(self, path=None):                     
         """
         Running the learn function and saving the instance into pickle file defined in path variable.
+
+        Returns the computation time.
         """
         start = time.time()
         self.learn()
@@ -549,6 +554,8 @@ class GridNet(ABC):
                 f)
             
         print("data saved")
+
+        return self.precomputation_time + (end - start)
 
 class afGridNet(GridNet):
     """
@@ -574,6 +581,8 @@ class afGridNet(GridNet):
         arcflags.arcflags_computation()
         arcflags.arcflags_pruning()
         end = time.time()
+
+        self.precomputation_time = end - start
 
         print(f"Arcflags computed and graph pruned in {end-start:.4f}s")
 
@@ -606,6 +615,8 @@ class reachGridNet(GridNet):
         reach.reach_computation(s_node=initial_node)
         pruned = reach.reach_pruning(initial_node, destination_node)
         end = time.time()
+
+        self.precomputation_time = end - start
 
         print(f"Reach values computed and graph pruned ({len(pruned)} nodes) in {end-start:.4f}s")
 
