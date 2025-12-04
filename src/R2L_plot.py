@@ -1,5 +1,5 @@
 from R2L_train import GridNet
-
+import pp
 import numpy as np
 import pickle
 import pandas
@@ -47,7 +47,7 @@ class R2LPlot():
             res[i]=np.sum(signal_brut[i-Li:i+Li+1])/(2*Li+1)
         return res
 
-    def probability_to_reach_terminal_node(self):
+    def probability_to_reach_terminal_node(self, time_budget=30, additional_text="", xy_lines=None):
         # extracting maximum value for all tables
         qmax  = self.qtable_L.max(axis=2)
         qmax2 = self.qtable_L2.max(axis=2)
@@ -76,47 +76,71 @@ class R2LPlot():
 
         # Colorbar
         cbar = fig.colorbar(pcm)
-        cbar.set_label("Q-max / Probabilità")
+        cbar.set_label("Q-max / Probability")
 
         # label axes
         ax.set_xlabel("Time budget (remaining return)")
         ax.set_ylabel("Nodes")
 
         # ticks
-        ax.set_xticks(np.arange(qmax.shape[1]))
+        ax.set_xticks(np.arange(0, 31, 5))
+        
+        # limit
+        ax.set_xlim(0, time_budget)
+
         ax.set_yticks(np.arange(qmax.shape[0]))
 
+        # vertical line
+        if xy_lines is not None:
+            for x, y in xy_lines:
+                ax.vlines(x, ymin=0, ymax=y, color='red', linewidth=0.5, linestyle='--')
+
         # Title
-        ax.set_title("Probability to reach terminal node 24")
+        ax.set_title(f"Probability to reach terminal node 24 {additional_text}")
 
         plt.tight_layout()
         plt.show()
 
 # ----------------------------------
-    def probability_to_reach_terminal_node_different_starting_nodes(self):
+    def probability_to_reach_terminal_node_different_starting_nodes(self, time_budget=30, additional_text=""):
         qmax = self.qtable_L.max(axis=2)
 
-        plt.subplots(figsize=(17*self.cm, 10*self.cm))
-        for i in [0,6,12,18,24]: # range(Net.line_numbers*Net.column_numbers):
-            plt.plot(qmax[i,:])
-        plt.xticks(np.arange(qmax.shape[1], step=5))    
-        plt.xlabel('Time budget (remaining return)')
-        plt.ylabel('Probability to reach terminal node 24')
-        plt.title('Probability to reach terminal node 24, strating from different nodes')
-        plt.legend(['Start form node 0', 'Start form node 6', 'Start form node 12', 'Start form node 18', 'Start form node 24'])
+        fig, ax = plt.subplots(figsize=(17*self.cm, 10*self.cm))
 
+        for i in [0, 6, 12, 18, 19, 24]:
+            ax.plot(qmax[i, :])
+
+        ax.set_xticks(np.arange(0, qmax.shape[1], 5))
+
+        ax.set_xlim(0, time_budget)
+
+        ax.set_xlabel('Time budget (remaining return)')
+        ax.set_ylabel('Probability to reach terminal node 24')
+        ax.set_title(f'Probability to reach terminal node 24, starting from different nodes {additional_text}')
+
+        ax.legend([
+            'Start from node 0',
+            'Start from node 6',
+            'Start from node 12',
+            'Start from node 18',
+            'Start from node 19',
+            'Start from node 24'
+        ])
+
+        plt.tight_layout()
         plt.show()
 
 # ----------------------------------
 
     def optimal_policy_to_reach_terminal_node(self):
+
         qmax = self.qtable_L.max(axis=2)
 
         fig, ax1 = plt.subplots(figsize=(20*self.cm, 10*self.cm))
         plt.xticks(np.arange(qmax.shape[1]))
         plt.yticks(np.arange(qmax.shape[0]))
         #plt.xticks(np.arange(qmax.shape[1], step=2))
-        plt.xticks(5*np.arange(qmax.shape[1]), np.arange(self.qmax.shape[1]))
+        plt.xticks(5*np.arange(qmax.shape[1]), np.arange(qmax.shape[1]))
         plt.xticks(np.arange(qmax.shape[1]))
         #CS2 = plt.contour(action_max, levels = np.arange(0, 4, 1))
         #CB = fig.colorbar(CS2)
@@ -190,6 +214,9 @@ class R2LPlot():
         plt.title('Number of visits')
 
         plt.show()
+    
+    def print_number_of_visits(self):
+        pp(self.number_of_visits[20][:][:])
 
 # ----------------------------------
     def average_travel_time_through_episodes(self):

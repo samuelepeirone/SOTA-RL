@@ -22,20 +22,19 @@ from Grid_network_and_Gamma_distribution import Matrix
 
 from R2L_train import GridNet, afGridNet, reachGridNet
 from R2L_test import Test
+from R2L_plot import R2LPlot
+
+import pp
 
 def main():
-    graph = Utils.load_object("./instances/graphs/5x5-1.pkl")
+    #graph = Utils.load_object("./instances/graphs/5x5-1.pkl")
     #graph.prune_node(17)
     #graph.prune_edge(7,12)
+    path_graph = "./instances/graphs/5x5-1.pkl"
+    graph = Utils.load_object(path_graph)
 
-    grid = reachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), episode_number=500000, episode_lissage=50000)
-    
-    grid.run()
-    #test = Test(grid)
-    #test.run("./instances/trained/grid_5x5_test-gn.pkl", start_node=0, remaining_reward=29, dont_print=True)
-
-    #test = Test(grid)
-    #test.run()
+    plt1 = R2LPlot(graph, "./instances/trained/grid_5x5-1_100k10k-gn.pkl")
+    plt1.print_number_of_visits()
 
 if __name__ == "__main__":
     main()

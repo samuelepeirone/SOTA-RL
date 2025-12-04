@@ -394,10 +394,6 @@ class GridNet(ABC):
             # resetting the environment
             self.reset()
 
-            # updating the number of visits
-            idx_start = int(1 + self.discrete_rate * self.remaining_reward)
-            idx_start = max(0, min(idx_start, self.qtable.shape[1]-1))
-            self.number_of_visits[self.current_node][idx_start][0] += 1
             step = 1
             self.avg_rew = 0
             self.eps = 1
@@ -419,6 +415,11 @@ class GridNet(ABC):
                 action = self.eps_greedy(node, rem_rew)
                 self.step(action)
                 self.avg_rew += self.rew
+
+                # updating the number of visits
+                idx_start = int(1 + self.discrete_rate * self.remaining_reward)
+                idx_start = max(0, min(idx_start, self.qtable.shape[1]-1))
+                self.number_of_visits[self.current_node][idx_start][action] += 1
 
                 done = self.is_terminal()
 

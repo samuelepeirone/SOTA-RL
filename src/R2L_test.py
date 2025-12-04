@@ -22,6 +22,8 @@ class Test:
         """
         self.Net.reset()
 
+        q_list = []
+
         # if a starting node is passed, we will compute the path from it
         if start_node is not None:
             self.Net.set_current_node(start_node)
@@ -45,6 +47,11 @@ class Test:
             # selecting the greedy policy
             action = np.argmax(self.Net.qtable_L[self.Net.current_node][int(1 + self.Net.discrete_rate * self.Net.remaining_reward)][:])
             
+            # checking Q-value
+            q_row = self.Net.qtable_L[self.Net.current_node][int(1 + self.Net.discrete_rate * self.Net.remaining_reward)][:]
+            max_q = np.max(q_row)
+            q_list.append(max_q)
+
             if dont_print is False:
                 print("action = ", action)
             
@@ -62,6 +69,8 @@ class Test:
         
         if dont_print is False:
             print("Terminal = ", self.Net.is_terminal())
+
+        return q_list
         
     def run(self, path, start_node=None, remaining_reward=None, dont_print=False):
         """
@@ -74,8 +83,9 @@ class Test:
         
         print("data loaded correctly.")
         
-        self.test(start_node=start_node, remaining_reward=remaining_reward, dont_print=dont_print)
+        q_list = self.test(start_node=start_node, remaining_reward=remaining_reward, dont_print=dont_print)
 
         print(f"SOTA path: {self.path}")
+        print(f"Probability Q-value: {q_list[0]}")
 
         return self.path
