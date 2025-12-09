@@ -48,16 +48,31 @@ class R2LPlot():
         return res
 
     def probability_to_reach_terminal_node(self, time_budget=30, additional_text="", xy_lines=None):
+    
+        # Define the discrete rate used for the Q-table dimension
+        # Assuming discrete_rate = 4 based on previous context.
+        # NOTE: You should ideally make 'self.Net.discrete_rate' available here.
+        discrete_rate = 4 
+
         # extracting maximum value for all tables
         qmax  = self.qtable_L.max(axis=2)
         qmax2 = self.qtable_L2.max(axis=2)
 
         max_deviation = np.max(np.abs(qmax - qmax2))
 
+        # 🌟 CORRECTION 1: Create the array of REAL TIME VALUES for the X-axis
+        # time_indices goes from 0 to 119 (since 30 * 4 = 120 bins)
+        time_indices = np.arange(qmax.shape[1]) 
+        
+        # time_values maps indices to real time: 0, 0.25, 0.5, ..., 29.75
+        time_values = time_indices / discrete_rate
+        
         # coordinate grid
+        # X now uses the real time values
+        # Y still uses the node indices
         X, Y = np.meshgrid(
-            np.arange(qmax.shape[1]),  # time
-            np.arange(qmax.shape[0])   # nodes
+            time_values,  # time
+            np.arange(qmax.shape[0])  # nodes
         )
 
         # colorbar limits
@@ -66,6 +81,9 @@ class R2LPlot():
         # Plot
         fig, ax = plt.subplots(figsize=(20*self.cm, 10*self.cm))
 
+        # Plotting using the corrected X (real time values)
+        # The X coordinate passed to pcolormesh defines the boundary edges of the cells.
+        # To get the correct centering/mapping, we use the calculated X and Y.
         pcm = ax.pcolormesh(
             X, Y, qmax,
             cmap='BuGn',
@@ -73,7 +91,7 @@ class R2LPlot():
             vmin=z_min,
             vmax=z_max
         )
-
+        
         # Colorbar
         cbar = fig.colorbar(pcm)
         cbar.set_label("Q-max / Probability")
@@ -82,15 +100,16 @@ class R2LPlot():
         ax.set_xlabel("Time budget (remaining return)")
         ax.set_ylabel("Nodes")
 
-        # ticks
-        ax.set_xticks(np.arange(0, 31, 5))
+        # 🌟 CORRECTION 2: Set X-ticks based on REAL TIME VALUES (0, 5, 10, 15, 20, 25, 30)
+        ax.set_xticks(np.arange(0, time_budget + 1, 5))
         
-        # limit
+        # limit (this was already correct since time_budget is 30)
         ax.set_xlim(0, time_budget)
 
         ax.set_yticks(np.arange(qmax.shape[0]))
 
-        # vertical line
+        # vertical line (X in xy_lines must now be real time values as well, 
+        # not indices, for the line to appear correctly)
         if xy_lines is not None:
             for x, y in xy_lines:
                 ax.vlines(x, ymin=0, ymax=y, color='red', linewidth=0.5, linestyle='--')
@@ -102,15 +121,18 @@ class R2LPlot():
         plt.show()
 
 # ----------------------------------
-    def probability_to_reach_terminal_node_different_starting_nodes(self, time_budget=30, additional_text=""):
+    def probability_to_reach_terminal_node_different_starting_nodes(self, time_budget=30, additional_text="", discrete_rate=4):
         qmax = self.qtable_L.max(axis=2)
 
         fig, ax = plt.subplots(figsize=(17*self.cm, 10*self.cm))
 
-        for i in [0, 6, 12, 18, 19, 24]:
-            ax.plot(qmax[i, :])
+        time_values = np.arange(qmax.shape[1]) / discrete_rate
 
-        ax.set_xticks(np.arange(0, qmax.shape[1], 5))
+        for i in [0, 6, 12, 18, 19, 24]:
+            # plotting q max in function of time budget
+            ax.plot(time_values, qmax[i, :])
+
+        ax.set_xticks(np.arange(0, time_budget+1, 5))
 
         ax.set_xlim(0, time_budget)
 
