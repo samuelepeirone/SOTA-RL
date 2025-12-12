@@ -20,7 +20,7 @@ from deterministic_algorithms import Dijkstra
 from utilities import Utils
 from Grid_network_and_Gamma_distribution import Matrix
 
-from R2L_train import GridNet, afGridNet, reachGridNet
+from R2L_train import GridNet, afGridNet, reachGridNet, embeddedReachGridNet
 from R2L_test import Test
 
 class R2LTestFunctions:
@@ -35,13 +35,21 @@ class R2LTestFunctions:
         Parameters:
         grid_type (str): Type of grid network to use ("standard", "arcflags", or "reach").
         """
+        grid = None
+
         match grid_type:
             case "standard":
-                grid = GridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), episode_number=500000, episode_lissage=50000)
+                grid = GridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                               episode_number=500000, episode_lissage=50000)
             case "arcflags":
-                grid = afGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), episode_number=500000, episode_lissage=50000)
+                grid = afGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                                 episode_number=500000, episode_lissage=50000)
             case "reach":
-                grid = reachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), episode_number=500000, episode_lissage=50000)
+                grid = reachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                                    episode_number=500000, episode_lissage=50000)
+            case "embedded_reach":
+                grid = embeddedReachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                                            episode_number=500000, episode_lissage=50000)
             case _:
                 ValueError(f"Invalid grid_type value")
 
@@ -49,7 +57,8 @@ class R2LTestFunctions:
             grid.get_graph().print_graph()
 
         test = Test(grid)
-        path = test.run(path_trained, start_node=start_node, remaining_reward=remaining_reward, dont_print=dont_print)
+        path = test.run(path_trained, start_node=start_node, 
+                        remaining_reward=remaining_reward, dont_print=dont_print)
 
         if print_graph_path is not False:
             grid.get_graph().print_graph(path=path)
@@ -61,38 +70,140 @@ class R2LTestFunctions:
         """
         Comparison between Standard R2L and Arc-Flags R2L on the same graph.
         """
-        print("======== STANDARD R2L =========\n")
+        print("========= STANDARD R2L ==========\n")
         
-        R2LTestFunctions.path_run(path_graph, path_trained_gn, "standard", start_node, remaining_reward, dont_print,
+        R2LTestFunctions.path_run(path_graph, path_trained_gn, "standard", 
+                                  start_node, remaining_reward, dont_print,
                                     print_graph_pruned, print_graph_path)
 
         print("\n======== ARC-FLAGS R2L ========\n")
 
-        R2LTestFunctions.path_run(path_graph, path_trained_af, "arcflags", start_node, remaining_reward, dont_print,
+        R2LTestFunctions.path_run(path_graph, path_trained_af, "arcflags", 
+                                  start_node, remaining_reward, dont_print,
                                     print_graph_pruned, print_graph_path)
 
+    @staticmethod
     def gn_af_rh_path_comparison(path_graph, path_trained_gn, path_trained_af, path_trained_rh,
                                  start_node=None, remaining_reward=None, dont_print=False, 
                                  print_graph_pruned=False, print_graph_path=False):
         """
         Comparison between Standard R2L, Arc-Flags R2L and Reach R2L on the same graph.
         """
-        print("======== STANDARD R2L =========\n")
+        print("========= STANDARD R2L ==========\n")
 
-        R2LTestFunctions.path_run(path_graph, path_trained_gn, "standard", start_node, remaining_reward, dont_print,
+        R2LTestFunctions.path_run(path_graph, path_trained_gn, "standard", 
+                                  start_node, remaining_reward, dont_print,
                                     print_graph_pruned, print_graph_path)
         
         print("\n======== ARC-FLAGS R2L ========\n")
 
-        R2LTestFunctions.path_run(path_graph, path_trained_af, "arcflags", start_node, remaining_reward, dont_print,
+        R2LTestFunctions.path_run(path_graph, path_trained_af, "arcflags", 
+                                  start_node, remaining_reward, dont_print,
                                     print_graph_pruned, print_graph_path)
         
-        print("\n======== REACH R2L ========\n")
+        print("\n========== REACH R2L ==========\n")
         
-        R2LTestFunctions.path_run(path_graph, path_trained_rh, "reach", start_node, remaining_reward, dont_print,
+        R2LTestFunctions.path_run(path_graph, path_trained_rh, "reach", 
+                                  start_node, remaining_reward, dont_print,
                                     print_graph_pruned, print_graph_path)
     
-    def train_run(path_graph, grid_type="standard", start_node=0, destination_node=24, episode_number=500000,
+    @staticmethod
+    def rh_erh_path_comparison(path_graph, path_trained_rh, path_trained_erh,
+                               start_node=None, remaining_reward=None, dont_print=False,
+                               print_graph_pruned=False, print_graph_path=False):
+        """
+        Comparison between Reach R2L and Embedded Reach R2L on the same graph.
+        """
+        print("\n========= REACH R2L =========\n")
+        
+        R2LTestFunctions.path_run(path_graph, path_trained_rh, "reach", start_node, 
+                                  remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+        
+        print("\n===== EMBEDDED REACH R2L =====\n")
+        
+        R2LTestFunctions.path_run(path_graph, path_trained_erh, "embedded_reach", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+
+    @staticmethod
+    def gn_af_erh_path_comparison(path_graph, path_trained_gn, path_trained_af, path_trained_erh,
+                                 start_node=None, remaining_reward=None, dont_print=False, 
+                                 print_graph_pruned=False, print_graph_path=False):
+        """
+        Comparison between Standard R2L, Arc-Flags R2L and Embedded Reach R2L on the same graph.
+        """
+        print("========= STANDARD R2L ==========\n")
+
+        R2LTestFunctions.path_run(path_graph, path_trained_gn, "standard", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+        
+        print("\n======== ARC-FLAGS R2L ========\n")
+
+        R2LTestFunctions.path_run(path_graph, path_trained_af, "arcflags", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+        
+        print("\n===== EMBEDDED REACH R2L ======\n")
+        
+        R2LTestFunctions.path_run(path_graph, path_trained_erh, "embedded_reach", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+    
+    @staticmethod
+    def gn_rh_erh_path_comparison(path_graph, path_trained_gn, path_trained_rh, path_trained_erh,
+                                 start_node=None, remaining_reward=None, dont_print=False, 
+                                 print_graph_pruned=False, print_graph_path=False):
+        """
+        Comparison between Standard R2L, Reach R2L and Embedded Reach R2L on the same graph.
+        """
+        print("========= STANDARD R2L ==========\n")
+
+        R2LTestFunctions.path_run(path_graph, path_trained_gn, "standard", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+        
+        print("\n========== REACH R2L ==========\n")
+
+        R2LTestFunctions.path_run(path_graph, path_trained_rh, "reach", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+        
+        print("\n===== EMBEDDED REACH R2L ======\n")
+        
+        R2LTestFunctions.path_run(path_graph, path_trained_erh, "embedded_reach", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+    
+    @staticmethod
+    def gn_erh_erhplus_path_comparison(path_graph, path_trained_gn, path_trained_erh, path_trained_erh_plus,
+                                 start_node=None, remaining_reward=None, dont_print=False, 
+                                 print_graph_pruned=False, print_graph_path=False):
+        """
+        Comparison between Standard R2L, Embedded Reach R2L and Embedded Reach Plus on the same graph.
+        """
+        print("========= STANDARD R2L ==========\n")
+
+        R2LTestFunctions.path_run(path_graph, path_trained_gn, "standard", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+        
+        print("\n===== EMBEDDED REACH R2L ======\n")
+
+        R2LTestFunctions.path_run(path_graph, path_trained_erh, "embedded_reach", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+        
+        print("\n=== EMBEDDED REACH PLUS R2L ===\n")
+        
+        R2LTestFunctions.path_run(path_graph, path_trained_erh_plus, "embedded_reach", 
+                                  start_node, remaining_reward, dont_print,
+                                    print_graph_pruned, print_graph_path)
+
+    @staticmethod
+    def train_run(path_graph, grid_type="standard", start_node=0, 
+                  destination_node=24, episode_number=500000,
                   episode_lissage=50000, path_save=None):
         """
         Trains a Standard R2L model on the given graph and saves the trained model.
@@ -114,6 +225,10 @@ class R2LTestFunctions:
                 grid = reachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
                        initial_node=start_node, destination_node=destination_node,
                        episode_number=episode_number, episode_lissage=episode_lissage)
+            case "embedded_reach":
+                grid = embeddedReachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                       initial_node=start_node, destination_node=destination_node,
+                       episode_number=episode_number, episode_lissage=episode_lissage)
             case _:
                 ValueError(f"Invalid grid_type value")        
         
@@ -122,7 +237,9 @@ class R2LTestFunctions:
 
         return time
     
-    def train_general_comparison(path_graph, start_node=0, destination_node=24, episode_number=500000, episode_lissage=50000,
+    @staticmethod
+    def train_general_comparison(path_graph, start_node=0, destination_node=24, 
+                                 episode_number=500000, episode_lissage=50000,
                                  path_save_gn=None, path_save_af=None, path_save_rh=None):
         """
         Trains Standard R2L, Arc-flags R2L and Reach R2L on the same graph and saves the trained models.

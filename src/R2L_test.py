@@ -5,7 +5,7 @@ import pandas
 import pickle
 import argparse
 
-from R2L_train import GridNet, afGridNet, reachGridNet
+from R2L_train import GridNet, afGridNet, reachGridNet, embeddedReachGridNet
 
 class Test:
     """
