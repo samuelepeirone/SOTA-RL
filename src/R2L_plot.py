@@ -388,3 +388,25 @@ class R2LPlot():
 
         plt.show()
 
+    @staticmethod
+    def probability_plot_history(paths_dict, title="On Time Arrival Probability from starting node"):
+        """
+        Plotting the probability to reach the terminal node over training episodes
+        for different models.
+        """
+        plt.figure(figsize=(10,6))
+
+        for model_name, path in paths_dict.items():
+            with open(path, 'rb') as f:
+                data = pickle.load(f)
+                history = data[8]   # history is store at index 8
+
+                episodes, probabilities = zip(*history)
+                plt.plot(episodes, probabilities, label=model_name)
+
+        plt.title(title)
+        plt.xlabel("Training Episodes")
+        plt.ylabel("Probability")
+        plt.legend()
+        plt.grid(True)
+        plt.show()

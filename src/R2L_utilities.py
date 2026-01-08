@@ -204,7 +204,10 @@ class R2LTestFunctions:
     @staticmethod
     def train_run(path_graph, grid_type="standard", start_node=0, 
                   destination_node=24, episode_number=500000,
-                  episode_lissage=50000, path_save=None):
+                  episode_lissage=50000, path_save=None, 
+                  reset_deviation_first_cycle=False, alpha=0.001, gamma=0.99,
+                  check_probability_threshold=False, probability_threshold=0.80,
+                  alpha_decay=False):
         """
         Trains a Standard R2L model on the given graph and saves the trained model.
         """
@@ -216,15 +219,27 @@ class R2LTestFunctions:
             case "standard":
                 grid = GridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
                        initial_node=start_node, destination_node=destination_node,
-                       episode_number=episode_number, episode_lissage=episode_lissage)
+                       episode_number=episode_number, episode_lissage=episode_lissage, 
+                       reset_deviation_first_cycle=reset_deviation_first_cycle,
+                       alpha=alpha, gamma=gamma, alpha_decay=alpha_decay, 
+                       check_probability_threshold=check_probability_threshold, 
+                       probability_threshold=probability_threshold)
             case "arcflags":
                 grid = afGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
                        initial_node=start_node, destination_node=destination_node,
-                       episode_number=episode_number, episode_lissage=episode_lissage)
+                       episode_number=episode_number, episode_lissage=episode_lissage,
+                       reset_deviation_first_cycle=reset_deviation_first_cycle,
+                       alpha=alpha, gamma=gamma, alpha_decay=alpha_decay,
+                       check_probability_threshold=check_probability_threshold, 
+                       probability_threshold=probability_threshold)
             case "reach":
                 grid = reachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
                        initial_node=start_node, destination_node=destination_node,
-                       episode_number=episode_number, episode_lissage=episode_lissage)
+                       episode_number=episode_number, episode_lissage=episode_lissage,
+                       reset_deviation_first_cycle=reset_deviation_first_cycle,
+                       alpha=alpha, gamma=gamma, alpha_decay=alpha_decay,
+                       check_probability_threshold=check_probability_threshold, 
+                       probability_threshold=probability_threshold)
             case "embedded_reach":
                 grid = embeddedReachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
                        initial_node=start_node, destination_node=destination_node,
@@ -240,6 +255,9 @@ class R2LTestFunctions:
     @staticmethod
     def train_general_comparison(path_graph, start_node=0, destination_node=24, 
                                  episode_number=500000, episode_lissage=50000,
+                                 reset_deviation_first_cycle=False,
+                                 alpha=0.001, gamma=0.99, alpha_decay=False,
+                                 check_probability_threshold=False, probability_threshold=0.80,
                                  path_save_gn=None, path_save_af=None, path_save_rh=None):
         """
         Trains Standard R2L, Arc-flags R2L and Reach R2L on the same graph and saves the trained models.
@@ -247,20 +265,70 @@ class R2LTestFunctions:
         print("======== STANDARD R2L =========\n")
 
         time_gn = R2LTestFunctions.train_run(path_graph, "standard", start_node, destination_node, 
-                                   episode_number, episode_lissage, path_save_gn)
+                                   episode_number, episode_lissage, path_save_gn, 
+                                   reset_deviation_first_cycle, alpha, gamma, check_probability_threshold, 
+                                   probability_threshold, alpha_decay)
         
         print("======== ARCFLAGS R2L =========\n")
 
         time_af = R2LTestFunctions.train_run(path_graph, "arcflags", start_node, destination_node, 
-                                   episode_number, episode_lissage, path_save_af)
+                                   episode_number, episode_lissage, path_save_af,
+                                   reset_deviation_first_cycle, alpha, gamma, check_probability_threshold, 
+                                   probability_threshold, alpha_decay)
         
         print("======== REACH R2L =========\n")
 
         time_rh = R2LTestFunctions.train_run(path_graph, "reach", start_node, destination_node, 
-                                   episode_number, episode_lissage, path_save_rh)
+                                   episode_number, episode_lissage, path_save_rh,
+                                   reset_deviation_first_cycle, alpha, gamma, check_probability_threshold, 
+                                   probability_threshold, alpha_decay)
         
         print("============================\n========= RESULTS ==========\n============================\n")
         print(f"Standard R2L training time: {time_gn:.2f}s")
         print(f"Arc-Flags R2L training time: {time_af:.2f}s")
         print(f"Reach R2L training time: {time_rh:.2f}s")
-    
+
+    @staticmethod
+    def train_with_tracking_run(path_graph, grid_type="standard", start_node=0, 
+                  destination_node=24, episode_number=500000,
+                  episode_lissage=50000, path_save=None, 
+                  reset_deviation_first_cycle=False, alpha=0.001, gamma=0.99,
+                  check_probability_threshold=False, probability_threshold=0.80,
+                  alpha_decay=False):
+        """
+        Trains a Standard R2L model on the given graph and saves the trained model.
+        """
+        # loading graph
+        graph = Utils.load_object(path_graph)
+        
+        # class initialization
+        match grid_type:
+            case "standard":
+                grid = GridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                       initial_node=start_node, destination_node=destination_node,
+                       episode_number=episode_number, episode_lissage=episode_lissage, 
+                       reset_deviation_first_cycle=reset_deviation_first_cycle,
+                       alpha=alpha, gamma=gamma, alpha_decay=alpha_decay, 
+                       check_probability_threshold=check_probability_threshold, 
+                       probability_threshold=probability_threshold)
+            case "arcflags":
+                grid = afGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                       initial_node=start_node, destination_node=destination_node,
+                       episode_number=episode_number, episode_lissage=episode_lissage,
+                       reset_deviation_first_cycle=reset_deviation_first_cycle,
+                       alpha=alpha, gamma=gamma, alpha_decay=alpha_decay,
+                       check_probability_threshold=check_probability_threshold, 
+                       probability_threshold=probability_threshold)
+            case "reach":
+                grid = reachGridNet(graph.get_adjacency_matrix(), graph.get_variance_matrix(), 
+                       initial_node=start_node, destination_node=destination_node,
+                       episode_number=episode_number, episode_lissage=episode_lissage,
+                       reset_deviation_first_cycle=reset_deviation_first_cycle,
+                       alpha=alpha, gamma=gamma, alpha_decay=alpha_decay,
+                       check_probability_threshold=check_probability_threshold, 
+                       probability_threshold=probability_threshold)
+            case _:
+                ValueError(f"Invalid grid_type value")        
+        
+        # running training and saving the resulting model 
+        grid.run_with_tracking(path=path_save)

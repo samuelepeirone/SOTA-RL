@@ -31,7 +31,9 @@ class GridNet(ABC):
                  max_rem_rew=30, discrete_rate=4,
                  reward_value=0, penalty_value=100,
                  episode_number=500000, episode_lissage=50000,
-                 alpha=0.001, gamma=0.99):
+                 alpha=0.001, gamma=0.99, alpha_decay=False, 
+                 check_probability_threshold=False, probability_threshold=0.8,
+                 reset_deviation_first_cycle=False):
         """
         Initializing GridNet class.
 
@@ -50,6 +52,15 @@ class GridNet(ABC):
             do a mean on N episodes, with N=episode_lissage
         - alpha (float)
         - gamma (float)
+        - alpha_decay (bool): whether to use the alpha-exponential decay fuction to update
+            the alpha value
+        - check_probability_threshold (bool): whether to stop when a probability threshold
+            from the starting node is reached
+        - probability_threshold (float): the probability threshold value to be reached
+            to stop the computation
+        - reset_deviation_first_cycle (bool): wheter to reset dev1 variabile after the first
+            cycle of learning, as it tends to have really small values that would stop the 
+            learning function even though the learning algorithm has not converged yet.
 
         Structures:
         - number_of_visits: 3D matrix that counts the number of times that
@@ -78,7 +89,7 @@ class GridNet(ABC):
 
         self.discrete_rate = discrete_rate
 
-        self.precision = 1/np.power(10,10)  # convergence precision
+        self.precision = 1/np.power(10,10)  # convergence precision, old: 1/np.power(10,10)
         self.dev = []   # deviation: max(abs(self.qtable - qtab))
         
         # =============================
@@ -100,6 +111,15 @@ class GridNet(ABC):
         # Bellman optimality function parameters
         self.alpha = alpha
         self.gamma = gamma
+        # alpha decay
+        self.alpha_decay = alpha_decay
+        self.alpha_zero = self.alpha
+        # decay_rate = (alpha_final / alpha_start)^(1/num_episodes)
+        self.decay_rate = (0.000001 / self.alpha)**(1 / self.episode_number)
+
+        # checking probability threshold
+        self.check_probability_threshold = check_probability_threshold
+        self.probability_threshold = probability_threshold
 
         # Q-tables
         self.qtable = [[[]]]
@@ -124,6 +144,9 @@ class GridNet(ABC):
 
         # computation time
         self.precomputation_time = 0
+
+        # learning settings
+        self.reset_deviation_first_cycle = reset_deviation_first_cycle
     
     # ==========================================================
     # ========================= UTILS  =========================
@@ -388,11 +411,18 @@ class GridNet(ABC):
         
         ep = 1
         dev1 = 1    # standard deviation
+
+        probability_threshold_reached = False
         
         # looping on all episodes while the deviation standard is greater than the precision
         while (ep <= self.episode_number) and (dev1 >= self.precision):
             # resetting the environment
             self.reset()
+
+            # alpha decay
+            if self.alpha_decay:
+                # alpha = alpha*decay_rate^ep
+                self.alpha = self.alpha_zero * (self.decay_rate ** (ep-1))
 
             step = 1
             self.avg_rew = 0
@@ -495,7 +525,13 @@ class GridNet(ABC):
                         # old line: dev1 += np.abs(self.qtable_L1[ii][ii][vec_max[ii][jj]] - self.qtable_L2[ii][ii][vec_max[ii][jj]])
                         dev1 += np.abs(self.qtable_L1[ii][jj][vec_max[ii][jj]] - self.qtable_L2[ii][jj][vec_max[ii][jj]])
                 
-                dev1 = dev1/(self.num_nodes*self.max_rem_rew*self.discrete_rate)      
+                dev1 = dev1/(self.num_nodes*self.max_rem_rew*self.discrete_rate)
+
+                if self.reset_deviation_first_cycle:
+                    # resetting norm 1 for first cycle
+                    if ep / self.episode_lissage == 1:
+                        dev1 = np.inf
+                        print("resetted dev1 value to inf")
                 
                 # saving the errors in dev_vec
                 self.dev_vec[i_liss,:] = [dev_sup,dev1]
@@ -518,7 +554,19 @@ class GridNet(ABC):
                 avg_rew_ep_liss = 0
                 i_liss += 1
 
+                # computing the Q-value of the starting node
+                q_row = self.qtable_L[self.initial_node][-1][:]
+                max_q = np.max(q_row)
+                print(f"Q-max from starting node: {max_q}")
+
+                # stop if the probability is above the threshold
+                #if max_q >= self.probability_threshold:
+                #if max_q > 0:
+                #    break
+
             ep += 1
+
+        print(f"dev1: {dev1}; alpha: {self.alpha}")
 
     def run(self, path=None):                     
         """
@@ -550,6 +598,218 @@ class GridNet(ABC):
         print("data saved")
 
         return self.precomputation_time + (end - start)
+    
+    def learn_with_tracking(self):
+        """
+        Tracking the probabilities of the starting node at each episode.
+        """
+        max_step = [15, 14, 13, 12, 11, 14, 13, 12, 11, 10, 13, 12, 11, 10, 9, 12, 11, 10, 9, 8, 11, 10, 9, 8, 7]
+
+        # initializing Q-tables
+        self.init_qtable()
+        self.qtable2 = np.zeros((self.num_nodes, self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L = np.zeros((self.num_nodes, self.max_rem_rew*self.discrete_rate + 1, 4))
+        self.qtable_L1 = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L2 = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        self.qtable_L_old = np.zeros((self.num_nodes,self.max_rem_rew * self.discrete_rate + 1, 4))
+        
+        # deviation
+        self.dev = np.zeros(self.episode_number + 1)    # vector that contains deviation 
+        dev1 = np.max(np.abs(np.max(self.qtable, 2) - np.max(self.qtable2, 2)))
+        dev_sup = 1
+        
+        self.number_of_visits = np.zeros((self.num_nodes, self.max_rem_rew*self.discrete_rate + 1, 4))
+        avg_rew_ep_liss = 0     # average reward per episode
+        ep_nbr = 0      # number of valid episodes in the block
+        step_nbr = 0    # number of steps in valid episodes of the block
+        i_liss = 0      # index of lissed block
+        self.dev_vec = np.zeros((int(self.episode_number/self.episode_lissage), 2))
+        
+        # data structure for tracking
+        history_proba = []
+
+        ep = 1
+        dev1 = 1    # standard deviation
+        
+        # looping on all episodes while the deviation standard is greater than the precision
+        while (ep <= self.episode_number) and (dev1 >= self.precision):
+            # resetting the environment
+            self.reset()
+
+            # alpha decay
+            if self.alpha_decay:
+                # alpha = alpha*decay_rate^ep
+                self.alpha = self.alpha_zero * (self.decay_rate ** (ep-1))
+
+            step = 1
+            self.avg_rew = 0
+            self.eps = 1
+            
+            self.qtable2 = copy.copy(self.qtable)
+            self.dev[ep] = dev1
+            ep_valide = False
+
+            # looping on steps of the episode until I get into a terminal state or I reach the maximum number of steps
+            while self.is_terminal() == 0 & step <= self.max_step_number:
+                node = self.current_node
+                rem_rew = self.remaining_reward
+
+                # protecting indexes
+                idx_curr = int(1 + self.discrete_rate * rem_rew)
+                idx_curr = max(0, min(idx_curr, self.qtable.shape[1]-1))
+
+                # choosing the action and updating the reward
+                action = self.eps_greedy(node, rem_rew)
+                self.step(action)
+                self.avg_rew += self.rew
+
+                # updating the number of visits
+                idx_start = int(1 + self.discrete_rate * self.remaining_reward)
+                idx_start = max(0, min(idx_start, self.qtable.shape[1]-1))
+                self.number_of_visits[self.current_node][idx_start][action] += 1
+
+                done = self.is_terminal()
+
+                # computing next state indexes and max Q[next]
+                idx_next = int(1 + self.discrete_rate * self.remaining_reward)
+                idx_next = max(0, min(idx_next, self.qtable.shape[1]-1))
+                max_q_next = np.max(self.qtable[self.current_node][idx_next][:])
+                
+                if done == 0:
+                    # not a terminal node: 
+                    # Q[s] = Q[s] + alpha(gamma * max Q[next] - Q[s])
+                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] += self.alpha * (self.gamma * max_q_next - self.qtable[node][idx_curr][action])           
+                elif done == 1:
+                    # terminal node:
+                    # Q[s] = Q[s] + alpha(gamma - Q[s])
+                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] += self.alpha * (self.gamma - self.qtable[node][idx_curr][action])
+                else:
+                    # no more time budget, I penalize this type of action with:
+                    # Q[s] = 0
+                    self.qtable[node][int(1 + self.discrete_rate * rem_rew)][action] = 0
+                
+                # eps decay: reducing epsilon at each step by the constant 1/max_step[node]
+                self.eps = max(0, self.eps - 1/(max_step[node]))
+                
+                step += 1
+            
+            # validity check of the episode
+            if self.is_terminal() == 1:
+                step_nbr += (step - 1)  # number of steps in the valid episodes
+                ep_nbr += 1     # number of valid episodes
+                ep_valide = True
+            
+            if ep_valide:
+                # computing the average reward and cumulate it into avg_rew_ep_liss
+                if (step - 1) > 0:  # robustness to division by zero
+                    self.avg_rew = self.avg_rew / (step-1)
+                    avg_rew_ep_liss += self.avg_rew
+                else:
+                    avg_rew_ep_liss += self.avg_rew
+            
+            # if I'm not at the end of episode lissage
+            if (ep % self.episode_lissage) != 0:
+                # accumulate the Q-tables in qtable_L1
+                self.qtable_L1 += self.qtable                 
+            else:
+                # episode lissage reached: time to do a lissed snapshot
+                print("Episode = ", ep, "----------  Error norm sup = ", dev_sup, "----------  Error norm 1 = ", dev1)
+
+                # remember that qtable_L1 contains the accumulated Q-values. by dividing by the number of episodes we are doing a mean
+                self.qtable_L1 = self.qtable_L1 / self.episode_lissage
+
+                # saving max Q(s, a) in episode-Q-table
+                self.qtable_ep[i_liss] = np.max(self.qtable_L1, 2)
+
+                # taking the best value of the previous lissed-Q-table
+                vec_max = np.argmax(self.qtable_L2,2)
+
+                # computing sup-norm deviation (maximum error) between qtable_L1 and qtable_L2
+                dev_sup = 0
+
+                # looping on states (nodes)
+                for ii in range(0, self.num_nodes - 1):
+                    # looping on discretized residual budget
+                    for jj in range(0, self.max_rem_rew * self.discrete_rate + 1):
+                        # old line: dev_sup = max(dev_sup, np.abs(self.qtable_L1[ii][ii][vec_max[ii][jj]] - self.qtable_L2[ii][ii][vec_max[ii][jj]]))
+                        dev_sup = max(dev_sup, np.abs(self.qtable_L1[ii][jj][vec_max[ii][jj]] - self.qtable_L2[ii][jj][vec_max[ii][jj]]))
+                
+                # computing norm 1 (average error) between qtable_L1 and qtable_L2
+                dev1 = 0
+
+                for ii in range(0, self.num_nodes - 1):
+                    for jj in range(0, self.max_rem_rew*self.discrete_rate + 1):
+                        # old line: dev1 += np.abs(self.qtable_L1[ii][ii][vec_max[ii][jj]] - self.qtable_L2[ii][ii][vec_max[ii][jj]])
+                        dev1 += np.abs(self.qtable_L1[ii][jj][vec_max[ii][jj]] - self.qtable_L2[ii][jj][vec_max[ii][jj]])
+                
+                dev1 = dev1/(self.num_nodes*self.max_rem_rew*self.discrete_rate)
+
+                if self.reset_deviation_first_cycle:
+                    # resetting norm 1 for first cycle
+                    if ep / self.episode_lissage == 1:
+                        dev1 = np.inf
+                        print("resetted dev1 value to inf")
+                
+                # saving the errors in dev_vec
+                self.dev_vec[i_liss,:] = [dev_sup,dev1]
+
+                # update of the lissed tables
+                self.qtable_L_old = copy.copy(self.qtable_L2)
+                self.qtable_L2 = copy.copy(self.qtable_L1)
+                self.qtable_L = copy.copy(self.qtable_L1)
+                self.qtable_L1 = np.zeros((self.num_nodes, self.max_rem_rew * self.discrete_rate + 1, 4))     # resettin qtable_L1
+
+                # saving episode metrics
+                self.avg_rew_vec.append(avg_rew_ep_liss/ ep_nbr)    # average reward per episode
+                self.avg_nbr_step.append(step_nbr / ep_nbr)     # average steps per episode
+                print("step_nbr = ", step_nbr / ep_nbr)
+                self.ep_nbr_vec.append(ep_nbr)      # number of valid episodes executed in the block
+
+                # resetting variables for next cycle
+                ep_nbr = 0
+                step_nbr = 0
+                avg_rew_ep_liss = 0
+                i_liss += 1
+
+                # computing the Q-value of the starting node and putting it into history_proba
+                q_row = self.qtable_L[self.initial_node][-1][:]
+                max_q = np.max(q_row)
+                print(f"Q-max from starting node: {max_q}")
+                history_proba.append((ep, max_q))
+
+            ep += 1
+
+        print(f"dev1: {dev1}; alpha: {self.alpha}")
+
+        return history_proba
+    
+    def run_with_tracking(self, path=None):
+        """
+        Running the learn_with_tracking function and saving the instance into pickle
+        file defined in path variable.
+        """
+        self.history_proba = self.learn_with_tracking()
+
+        print(f"Learning phase completed with tracking.")
+
+        if path is None:
+            path = "./instances/probabilities/undefined-probability-test.pkl"
+
+        with open(path, 'wb') as f:
+            pickle.dump([
+                self.qtable_L, 
+                self.qtable_L_old, 
+                self.avg_rew_vec, 
+                self.avg_nbr_step, 
+                self.ep_nbr_vec, 
+                self.qtable_ep,
+                self.number_of_visits, 
+                self.dev_vec,
+                self.history_proba
+            ], f)
+
+        print(f"Data saved successfully at {path}")
 
 class afGridNet(GridNet):
     """
@@ -559,7 +819,10 @@ class afGridNet(GridNet):
                  initial_node=0, destination_node=24, 
                  max_rem_rew=30, discrete_rate=4, reward_value=0, 
                  penalty_value=100, episode_number=500000, 
-                 episode_lissage=50000, alpha=0.001, gamma=0.99):
+                 episode_lissage=50000, alpha=0.001, gamma=0.99,
+                 alpha_decay=False, 
+                 check_probability_threshold=False, probability_threshold=0.8,
+                 reset_deviation_first_cycle=False):
         """
         After initializing the GridNet superclass, we will use 
         graph instance to work on, as a lot of functions
@@ -583,7 +846,9 @@ class afGridNet(GridNet):
         super().__init__(adj_matrix, var_matrix, graph, initial_node, 
                          destination_node, max_rem_rew, discrete_rate, 
                          reward_value, penalty_value, episode_number, 
-                         episode_lissage, alpha, gamma)
+                         episode_lissage, alpha, gamma, alpha_decay,
+                         check_probability_threshold, probability_threshold,
+                         reset_deviation_first_cycle)
 
 class reachGridNet(GridNet):
     """
@@ -593,7 +858,10 @@ class reachGridNet(GridNet):
                  initial_node=0, destination_node=24, 
                  max_rem_rew=30, discrete_rate=4, reward_value=0, 
                  penalty_value=100, episode_number=500000, 
-                 episode_lissage=50000, alpha=0.001, gamma=0.99):
+                 episode_lissage=50000, alpha=0.001, gamma=0.99,
+                 alpha_decay=False, 
+                 check_probability_threshold=False, probability_threshold=0.8,
+                 reset_deviation_first_cycle=False):
         """
         After initializing the GridNet superclass, we will use 
         graph instance to work on, as a lot of functions
@@ -617,7 +885,9 @@ class reachGridNet(GridNet):
         super().__init__(adj_matrix, var_matrix, graph, initial_node, 
                          destination_node, max_rem_rew, discrete_rate, 
                          reward_value, penalty_value, episode_number, 
-                         episode_lissage, alpha, gamma)
+                         episode_lissage, alpha, gamma, alpha_decay,
+                         check_probability_threshold, probability_threshold,
+                         reset_deviation_first_cycle)
         
 class embeddedReachGridNet(GridNet):
     """
