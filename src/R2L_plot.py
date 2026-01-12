@@ -410,3 +410,81 @@ class R2LPlot():
         plt.legend()
         plt.grid(True)
         plt.show()
+
+    @staticmethod
+    def plot_q_vs_budget_from_pickle(paths_dict, node_index=0, discrete_rate=4, x_range=None, title="Cumulative Probability vs Time Budget"):
+        """
+        Plotting the Q-values over temporal budget.
+        """
+        plt.figure(figsize=(10, 6))
+
+        for model_name, path in paths_dict.items():
+            with open(path, 'rb') as f:
+                data = pickle.load(f)
+                
+                qtable_L = data[0] # L table is stored at index 0
+
+                # qtable_L shape: [num_nodes, budget_bins, actions]
+                num_bins = qtable_L.shape[1]
+                time_axis = np.arange(num_bins) / discrete_rate
+
+                # 2. Extracting Q-values for the specified node
+                q_values = np.max(qtable_L[node_index], axis=1)
+
+                plt.plot(time_axis, q_values, label=f"{model_name}")
+
+        plt.title(f"{title} (from Node {node_index})")
+        plt.xlabel("Time Budget")
+        plt.ylabel("Probability (Q-Value)")
+
+        # zoom
+        if x_range:
+            plt.xlim(x_range)
+
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+    
+    @staticmethod
+    def plot_pdf_central_difference(paths_dict, node_index=0, discrete_rate=4, x_range=None, title="Travel Time PDF (Central Difference)"):
+        """
+        Calcola e plotta la PDF del tempo di percorrenza utilizzando 
+        la derivata numerica con differenza centrale.
+        """
+        plt.figure(figsize=(12, 7))
+
+        for model_name, path in paths_dict.items():
+            with open(path, 'rb') as f:
+                data = pickle.load(f)
+                
+                qtable = data[0]    # qtable_L
+                
+                # 1. Extracting max Q-values for the node
+                q_values = np.max(qtable[node_index], axis=1)
+                
+                # 2. Defining delta_x = 1/DR
+                delta_x = 1 / discrete_rate
+                
+                # 3. Computing PDF with Central Difference
+                # q(x) = [Q(x + delta_x) - Q(x - delta_x)] / (2 * delta_x)
+                numerator = q_values[2:] - q_values[:-2]
+                denominator = 2 * delta_x
+                pdf_values = numerator / denominator
+                
+                num_bins = len(q_values)
+                time_axis = np.arange(1, num_bins - 1) / discrete_rate
+
+                plt.plot(time_axis, pdf_values, label=model_name, linewidth=2.5)
+
+        plt.title(f"{title}\n(for Node {node_index})")
+        plt.xlabel("Time Budget")
+        plt.ylabel("Probability Density")
+
+        # zoom
+        if x_range:
+            plt.xlim(x_range)
+
+        plt.legend()
+        plt.grid(True)
+        
+        plt.show()
