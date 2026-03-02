@@ -412,11 +412,19 @@ class R2LPlot():
         plt.show()
 
     @staticmethod
-    def plot_q_vs_budget_from_pickle(paths_dict, node_index=0, discrete_rate=4, x_range=None, title="Cumulative Probability vs Time Budget"):
+    def plot_q_vs_budget_from_pickle(paths_dict, node_index=0, 
+                                     discrete_rate=4, x_range=None,
+                                     title="Cumulative Probability vs Time Budget",
+                                     font_scale=1.0):
         """
         Plotting the Q-values over temporal budget.
         """
         plt.figure(figsize=(10, 6))
+
+        title_size = 14 * font_scale
+        label_size = 12 * font_scale
+        tick_size = 10 * font_scale
+        line_width = 1.75 * font_scale
 
         for model_name, path in paths_dict.items():
             with open(path, 'rb') as f:
@@ -431,27 +439,36 @@ class R2LPlot():
                 # 2. Extracting Q-values for the specified node
                 q_values = np.max(qtable_L[node_index], axis=1)
 
-                plt.plot(time_axis, q_values, label=f"{model_name}")
+                plt.plot(time_axis, q_values, label=f"{model_name}", linewidth=line_width)
 
-        plt.title(f"{title} (from Node {node_index})")
-        plt.xlabel("Time Budget")
-        plt.ylabel("Probability (Q-Value)")
+        plt.title(f"{title} (from Node {node_index})", fontsize=title_size)
+        plt.xlabel("Time Budget", fontsize=label_size)
+        plt.ylabel("Probability (Q-Value)", fontsize=label_size)
+        plt.xticks(fontsize=tick_size)
+        plt.yticks(fontsize=tick_size)
 
         # zoom
         if x_range:
             plt.xlim(x_range)
 
-        plt.legend()
+        plt.legend(fontsize=tick_size)
         plt.grid(True)
         plt.show()
     
     @staticmethod
-    def plot_pdf_central_difference(paths_dict, node_index=0, discrete_rate=4, x_range=None, title="Travel Time PDF (Central Difference)"):
+    def plot_pdf_central_difference(paths_dict, node_index=0, discrete_rate=4, 
+                                    x_range=None, title="Travel Time PDF (Central Difference)",
+                                    font_scale=1.0):
         """
         Calcola e plotta la PDF del tempo di percorrenza utilizzando 
         la derivata numerica con differenza centrale.
         """
         plt.figure(figsize=(12, 7))
+
+        title_size = 14 * font_scale
+        label_size = 12 * font_scale
+        tick_size = 10 * font_scale
+        line_width = 1.75 * font_scale
 
         for model_name, path in paths_dict.items():
             with open(path, 'rb') as f:
@@ -474,17 +491,19 @@ class R2LPlot():
                 num_bins = len(q_values)
                 time_axis = np.arange(1, num_bins - 1) / discrete_rate
 
-                plt.plot(time_axis, pdf_values, label=model_name, linewidth=2.5)
+                plt.plot(time_axis, pdf_values, label=model_name, linewidth=line_width)
 
-        plt.title(f"{title}\n(for Node {node_index})")
-        plt.xlabel("Time Budget")
-        plt.ylabel("Probability Density")
+        plt.title(f"{title}\n(for Node {node_index})", fontsize=title_size)
+        plt.xlabel("Time Budget", fontsize=label_size)
+        plt.ylabel("Probability Density", fontsize=label_size)
+        plt.xticks(fontsize=tick_size)
+        plt.yticks(fontsize=tick_size)
 
         # zoom
         if x_range:
             plt.xlim(x_range)
 
-        plt.legend()
+        plt.legend(fontsize=tick_size)
         plt.grid(True)
         
         plt.show()
